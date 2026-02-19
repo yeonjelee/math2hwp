@@ -124,6 +124,8 @@ def get_hwp_conversion(image, doc_type, user_api_key=None):
            - 무한대: `inf`
            - 삼각/로그 띄어쓰기: log, sin, cos 등은 띄어쓰기 대신 백틱(`) 사용. (예: log`5, sin`A)
         9. **그리스 문자:** 파이(`pi`), 세타(`theta`), 알파(`alpha`), 베타(`beta`) 등은 영문 소문자로 그대로 작성하라.
+        10. **대문자 알파벳:** 수식 내에 대문자 알파벳(A, B, P 등)이 들어갈 경우, 반드시 글자 앞에 `rm `을 붙여라. 
+           (예: rm A, rm B, rm P 등)
         """
 
         max_retries = 3
