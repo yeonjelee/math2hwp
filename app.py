@@ -40,7 +40,6 @@ def crop_image(img, mode):
     elif mode == "아래쪽 절반": return img.crop((0, height // 2, width, height))
     return img
 
-# app.py 의 parse_problems 함수 수정
 def parse_problems(text):
     """결과 텍스트를 쪼개고 ==== [번호] ==== 부분은 화면에서 보이지 않게 제거하기"""
     parts = re.split(r'(?=====\s*\[.*?\]\s*====)', text)
@@ -61,7 +60,6 @@ def parse_problems(text):
 with st.sidebar:
     st.title("🧮 설정 및 입력")
     
-    # [API 키 입력 가이드]
     with st.expander("🔑 API 키 설정", expanded=False):
         user_api_key = st.text_input(
             "Google API Key", 
@@ -74,73 +72,59 @@ with st.sidebar:
 
     st.header("1️⃣ 파일 업로드")
     uploaded_file = st.file_uploader("교재 PDF/이미지", type=["pdf", "jpg", "png"])
+
+    st.markdown("---")
+    st.header("2️⃣ 설정 및 영역 선택")
     
-    image_to_process = None
-    page_key_prefix = "" 
-
-    if uploaded_file:
-        # PDF 처리
-        if uploaded_file.type == "application/pdf":
-            doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
-            total_pages = len(doc)
-            st.caption(f"총 {total_pages}페이지")
-            
-            # 페이지 선택
-            page_num = st.number_input("페이지 선택", 1, total_pages, 1)
-            
-            # 이미지 변환 (줌 2배로 고화질)
-            page = doc.load_page(page_num - 1)
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-            origin_image = Image.open(io.BytesIO(pix.tobytes()))
-            
-            page_key_prefix = f"{uploaded_file.name}_p{page_num}"
-            
-        # 이미지 파일 처리
-        else:
-            origin_image = Image.open(uploaded_file)
-            page_key_prefix = uploaded_file.name
-
-        st.markdown("---")
-        st.header("2️⃣ 설정 및 영역 선택")
-        
-        # 🌟 문서 유형 선택 추가
-        doc_type = st.radio("문서 유형", ["문제", "상세 해설", "빠른 정답"])
-        
-        # 영역 자르기
-        crop_mode = st.selectbox("영역 선택", ["전체 페이지", "왼쪽 절반", "오른쪽 절반", "위쪽 절반", "아래쪽 절반"])
-        image_to_process = crop_image(origin_image, crop_mode)
-        
-        # 키 생성 (문서 유형도 키에 포함시켜서 캐시 충돌 방지)
-        page_key = f"{page_key_prefix}_{crop_mode}_{doc_type}"
-
-        convert_btn = st.button("보이는 문제 전체 변환 🚀", type="primary", use_container_width=True)
+    doc_type = st.radio("문서 유형", ["문제", "상세 해설", "빠른 정답"])
+    crop_mode = st.selectbox("영역 선택", ["전체 페이지", "왼쪽 절반", "오른쪽 절반", "위쪽 절반", "아래쪽 절반"])
+    
+    convert_btn = st.button("보이는 문제 전체 변환 🚀", type="primary", use_container_width=True)
 
 # --------------------------------------------------------------------------
 # 5. 메인 화면
 # --------------------------------------------------------------------------
 st.title("🧮 수학 문제 HWP 변환기")
 
-if image_to_process:
-    # 🌟 원본 이미지 끄기/켜기 토글 스위치 추가
+if uploaded_file:
+    # 🌟 메인 화면에서 파일 처리 및 페이지 선택 수행 🌟
+    if uploaded_file.type == "application/pdf":
+        doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
+        total_pages = len(doc)
+        
+        # 페이지 선택 입력창을 메인 화면 상단에 배치
+        col1, col2 = st.columns([1, 4])
+        with col1:
+            page_num = st.number_input(f"📄 페이지 선택 (총 {total_pages}장)", min_value=1, max_value=total_pages, value=1)
+        
+        page = doc.load_page(page_num - 1)
+        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+        origin_image = Image.open(io.BytesIO(pix.tobytes()))
+        page_key_prefix = f"{uploaded_file.name}_p{page_num}"
+    else:
+        origin_image = Image.open(uploaded_file)
+        page_key_prefix = uploaded_file.name
+
+    image_to_process = crop_image(origin_image, crop_mode)
+    page_key = f"{page_key_prefix}_{crop_mode}_{doc_type}"
+
+    st.divider()
+
+    # 원본 이미지 끄기/켜기 토글 스위치
     show_image = st.toggle("📄 원본 이미지 함께 보기", value=True, help="스위치를 끄면 결과창이 전체 너비로 확장됩니다.")
     
-    # 토글 상태에 따라 레이아웃(컨테이너) 다르게 설정
     if show_image:
         col_left, col_right = st.columns(2)
         with col_left:
             st.image(image_to_process, caption="변환 대상 영역", use_container_width=True)
-        # 이미지가 켜져 있으면 오른쪽 단(col_right)에 결과를 띄움
         result_container = col_right
     else:
-        # 이미지가 꺼져 있으면 화면 전체(st.container)에 결과를 띄움
         result_container = st.container()
 
     # ---------------- 변환 및 결과 출력 영역 ----------------
-    # (선택된 컨테이너 안에 결과가 들어갑니다)
     with result_container:
         st.subheader("📝 변환 결과")
         
-        # 2) 변환 로직 (캐싱 적용)
         if convert_btn:
             if st.session_state.last_page_key != page_key:
                 st.session_state.curr_idx = 0
@@ -162,9 +146,7 @@ if image_to_process:
                     else:
                         st.error(result_text)
 
-        # 3) 결과 뷰어 (하나씩 보기)
         if st.session_state.problems_list:
-            # 네비게이션
             c1, c2, c3 = st.columns([1, 2, 1])
             with c1:
                 if st.button("⬅️ 이전 문제"):
@@ -177,7 +159,6 @@ if image_to_process:
                 if st.button("다음 문제 ➡️"):
                     if st.session_state.curr_idx < tot - 1: st.session_state.curr_idx += 1
             
-            # 코드 출력 (여기에는 아까 설정한 정규식으로 ====번호==== 가 지워진 텍스트가 뜹니다)
             st.info("우측 상단의 복사(Copy) 아이콘을 눌러 한글(HWP)에 붙여넣으세요.")
             target_prob = st.session_state.problems_list[st.session_state.curr_idx]
             st.code(target_prob, language="text")
@@ -185,4 +166,4 @@ if image_to_process:
             st.info("👈 사이드바의 '보이는 문제 전체 변환 🚀' 버튼을 누르면 여기에 결과가 나타납니다.")
         
 else:
-    st.info("👈 왼쪽 사이드바에서 PDF를 업로드하고 문서 유형을 선택하세요.")
+    st.info("👈 왼쪽 사이드바에서 PDF를 업로드하세요.")
