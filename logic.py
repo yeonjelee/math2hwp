@@ -46,7 +46,7 @@ def apply_hwp_rm_rule(text):
 
 def get_hwp_conversion(image, doc_type, user_api_key=None):
     """
-    gemini-1.5-flash 모델을 강제로 사용하여 HWP 수식 변환
+    gemini-flash-latest 모델을 강제로 사용하여 HWP 수식 변환
     doc_type에 따라 추출 내용 분기 처리
     """
     
@@ -65,7 +65,7 @@ def get_hwp_conversion(image, doc_type, user_api_key=None):
     try:
         genai.configure(api_key=final_key)
         
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-flash-latest')
         
         optimized_img = optimize_image(image)
         
