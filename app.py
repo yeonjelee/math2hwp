@@ -6,12 +6,11 @@ import re
 from logic import get_hwp_conversion
 
 # --------------------------------------------------------------------------
-# 1. 페이지 설정
+# 1. 페이지 설정 (사이드바 관련 옵션 제거)
 # --------------------------------------------------------------------------
 st.set_page_config(page_title="Math HWP Agent", 
                    page_icon="🧮", 
-                   layout="wide", 
-                  initial_sidebar_state="collapsed")
+                   layout="wide")
 
 # --------------------------------------------------------------------------
 # 2. 세션 상태 초기화
@@ -55,46 +54,31 @@ def parse_problems(text):
     return cleaned_parts
 
 # --------------------------------------------------------------------------
-# 4. 사이드바 UI
-# --------------------------------------------------------------------------
-with st.sidebar:
-    st.title("🧮 설정 및 입력")
-    
-    with st.expander("🔑 API 키 설정", expanded=False):
-        user_api_key = st.text_input(
-            "Google API Key", 
-            type="password", 
-            placeholder="AIzaSy...",
-            help="입력한 키는 저장되지 않고 휘발됩니다."
-        )
-
-    st.divider()
-
-    st.header("1️⃣ 파일 업로드")
-    uploaded_file = st.file_uploader("교재 PDF/이미지", type=["pdf", "jpg", "png"])
-
-    st.markdown("---")
-    st.header("2️⃣ 설정 및 영역 선택")
-    
-    doc_type = st.radio("문서 유형", ["문제", "상세 해설", "빠른 정답"])
-    crop_mode = st.selectbox("영역 선택", ["전체 페이지", "왼쪽 절반", "오른쪽 절반", "위쪽 절반", "아래쪽 절반"])
-    
-    convert_btn = st.button("보이는 문제 전체 변환 🚀", type="primary", use_container_width=True)
-
-# --------------------------------------------------------------------------
-# 5. 메인 화면
+# 4. 메인 화면 UI 및 설정 (사이드바 없음)
 # --------------------------------------------------------------------------
 st.title("🧮 수학 문제 HWP 변환기")
 
+# API 키 설정 (가장 위쪽, 기본적으로 접어둠)
+with st.expander("🔑 API 키 설정", expanded=False):
+    user_api_key = st.text_input(
+        "Google API Key", 
+        type="password", 
+        placeholder="AIzaSy...",
+        help="입력한 키는 저장되지 않고 휘발됩니다."
+    )
+
+# 파일 업로드
+uploaded_file = st.file_uploader("교재 PDF/이미지 업로드", type=["pdf", "jpg", "png"])
+
 if uploaded_file:
-    # 🌟 메인 화면에서 파일 처리 및 페이지 선택 수행 🌟
+    # 🌟 메인 화면 상단: 파일 처리 및 페이지 선택 🌟
     if uploaded_file.type == "application/pdf":
         doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
         total_pages = len(doc)
         
-        # 페이지 선택 입력창을 메인 화면 상단에 배치
-        col1, col2 = st.columns([1, 4])
-        with col1:
+        # 페이지 선택 입력창을 작게 배치
+        col_page, _ = st.columns([1, 4])
+        with col_page:
             page_num = st.number_input(f"📄 페이지 선택 (총 {total_pages}장)", min_value=1, max_value=total_pages, value=1)
         
         page = doc.load_page(page_num - 1)
@@ -105,12 +89,28 @@ if uploaded_file:
         origin_image = Image.open(uploaded_file)
         page_key_prefix = uploaded_file.name
 
+    st.markdown("---")
+
+    # 🌟 헤더 영역: 설정 및 변환 버튼 (가로 3단 배치) 🌟
+    set_c1, set_c2, set_c3 = st.columns([1.5, 1.5, 1])
+    
+    with set_c1:
+        # 라디오 버튼을 가로형(horizontal)으로 배치해서 공간 절약
+        doc_type = st.radio("문서 유형", ["문제", "상세 해설", "빠른 정답"], horizontal=True)
+    with set_c2:
+        crop_mode = st.selectbox("영역 선택", ["전체 페이지", "왼쪽 절반", "오른쪽 절반", "위쪽 절반", "아래쪽 절반"])
+    with set_c3:
+        # 드롭다운과 높이를 맞추기 위해 약간의 여백 추가
+        st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+        convert_btn = st.button("보이는 문제 전체 변환 🚀", type="primary", use_container_width=True)
+
+    # 이미지 처리 및 키 생성
     image_to_process = crop_image(origin_image, crop_mode)
     page_key = f"{page_key_prefix}_{crop_mode}_{doc_type}"
 
     st.divider()
 
-    # 원본 이미지 끄기/켜기 토글 스위치
+    # ---------------- 좌/우 분할 뷰어 (원본 이미지 & 변환 결과) ----------------
     show_image = st.toggle("📄 원본 이미지 함께 보기", value=True, help="스위치를 끄면 결과창이 전체 너비로 확장됩니다.")
     
     if show_image:
@@ -121,7 +121,7 @@ if uploaded_file:
     else:
         result_container = st.container()
 
-    # ---------------- 변환 및 결과 출력 영역 ----------------
+    # 결과 출력 영역
     with result_container:
         st.subheader("📝 변환 결과")
         
@@ -163,7 +163,7 @@ if uploaded_file:
             target_prob = st.session_state.problems_list[st.session_state.curr_idx]
             st.code(target_prob, language="text")
         else:
-            st.info("👈 사이드바의 '보이는 문제 전체 변환 🚀' 버튼을 누르면 여기에 결과가 나타납니다.")
+            st.info("👆 위에 있는 '보이는 문제 전체 변환 🚀' 버튼을 누르면 여기에 결과가 나타납니다.")
         
 else:
-    st.info("👈 왼쪽 사이드바에서 PDF를 업로드하세요.")
+    st.info("👆 위에 파일을 먼저 업로드해 주세요.")
