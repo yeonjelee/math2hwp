@@ -121,17 +121,23 @@ with st.sidebar:
 st.title("🧮 수학 문제 HWP 변환기")
 
 if image_to_process:
-    # 🌟 화면을 좌우 5:5로 분할 (st.columns 활용)
-    col_left, col_right = st.columns(2)
+    # 🌟 원본 이미지 끄기/켜기 토글 스위치 추가
+    show_image = st.toggle("📄 원본 이미지 함께 보기", value=True, help="스위치를 끄면 결과창이 전체 너비로 확장됩니다.")
     
-    # ---------------- 왼쪽 단: 원본 이미지 ----------------
-    with col_left:
-        # st.image 부분을 st.expander 안으로 집어넣기!
-        with st.expander("📄 원본 이미지 보기/숨기기", expanded=True):
+    # 토글 상태에 따라 레이아웃(컨테이너) 다르게 설정
+    if show_image:
+        col_left, col_right = st.columns(2)
+        with col_left:
             st.image(image_to_process, caption="변환 대상 영역", use_container_width=True)
+        # 이미지가 켜져 있으면 오른쪽 단(col_right)에 결과를 띄움
+        result_container = col_right
+    else:
+        # 이미지가 꺼져 있으면 화면 전체(st.container)에 결과를 띄움
+        result_container = st.container()
 
-    # ---------------- 오른쪽 단: 변환 결과 ----------------
-    with col_right:
+    # ---------------- 변환 및 결과 출력 영역 ----------------
+    # (선택된 컨테이너 안에 결과가 들어갑니다)
+    with result_container:
         st.subheader("📝 변환 결과")
         
         # 2) 변환 로직 (캐싱 적용)
@@ -141,7 +147,7 @@ if image_to_process:
                 st.session_state.last_page_key = page_key
 
             if page_key in st.session_state.converted_cache:
-                st.success("⚡ 저장된 결과를 불러왔습니다! (API 미사용)")
+                st.success("⚡ 저장된 결과를 불러왔습니다!")
                 result_text = st.session_state.converted_cache[page_key]
                 st.session_state.problems_list = parse_problems(result_text)
                 
@@ -171,12 +177,11 @@ if image_to_process:
                 if st.button("다음 문제 ➡️"):
                     if st.session_state.curr_idx < tot - 1: st.session_state.curr_idx += 1
             
-            # 코드 출력
+            # 코드 출력 (여기에는 아까 설정한 정규식으로 ====번호==== 가 지워진 텍스트가 뜹니다)
             st.info("우측 상단의 복사(Copy) 아이콘을 눌러 한글(HWP)에 붙여넣으세요.")
             target_prob = st.session_state.problems_list[st.session_state.curr_idx]
             st.code(target_prob, language="text")
         else:
-            # 변환 전 안내 문구
             st.info("👈 사이드바의 '보이는 문제 전체 변환 🚀' 버튼을 누르면 여기에 결과가 나타납니다.")
         
 else:
