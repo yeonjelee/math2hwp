@@ -106,58 +106,68 @@ with st.sidebar:
 # --------------------------------------------------------------------------
 # 5. 메인 화면
 # --------------------------------------------------------------------------
+# --------------------------------------------------------------------------
+# 5. 메인 화면
+# --------------------------------------------------------------------------
 st.title("🧮 수학 문제 HWP 변환기")
 
 if image_to_process:
-    # 1) 원본 보기 토글
-    with st.expander("📄 원본 이미지 확인하기 (클릭)", expanded=True):
+    # 🌟 화면을 좌우 5:5로 분할 (st.columns 활용)
+    col_left, col_right = st.columns(2)
+    
+    # ---------------- 왼쪽 단: 원본 이미지 ----------------
+    with col_left:
+        st.subheader("📄 원본 이미지")
         st.image(image_to_process, caption="변환 대상 영역", use_container_width=True)
 
-    # 2) 변환 로직 (캐싱 적용)
-    if convert_btn:
-        if st.session_state.last_page_key != page_key:
-            st.session_state.curr_idx = 0
-            st.session_state.last_page_key = page_key
-
-        if page_key in st.session_state.converted_cache:
-            st.success("⚡ 저장된 결과를 불러왔습니다! (API 미사용)")
-            result_text = st.session_state.converted_cache[page_key]
-            st.session_state.problems_list = parse_problems(result_text)
-            
-        else:
-            with st.spinner(f"🤖 AI가 페이지 내 모든 {doc_type}을(를) 분석 중입니다..."):
-                # doc_type 전달
-                result_text = get_hwp_conversion(image_to_process, doc_type, user_api_key)
-                
-                if "API 오류" not in result_text and "키가 없습니다" not in result_text:
-                    st.session_state.converted_cache[page_key] = result_text
-                    st.session_state.problems_list = parse_problems(result_text)
-                    st.session_state.curr_idx = 0
-                else:
-                    st.error(result_text)
-
-    # 3) 결과 뷰어 (하나씩 보기)
-    if st.session_state.problems_list:
-        st.divider()
+    # ---------------- 오른쪽 단: 변환 결과 ----------------
+    with col_right:
         st.subheader("📝 변환 결과")
         
-        # 네비게이션
-        c1, c2, c3 = st.columns([1, 2, 1])
-        with c1:
-            if st.button("⬅️ 이전 문제"):
-                if st.session_state.curr_idx > 0: st.session_state.curr_idx -= 1
-        with c2:
-            cur = st.session_state.curr_idx + 1
-            tot = len(st.session_state.problems_list)
-            st.markdown(f"<div style='text-align:center; font-size:1.2em;'><b>항목 {cur} / {tot}</b></div>", unsafe_allow_html=True)
-        with c3:
-            if st.button("다음 문제 ➡️"):
-                if st.session_state.curr_idx < tot - 1: st.session_state.curr_idx += 1
-        
-        # 코드 출력
-        st.info("우측 상단의 복사(Copy) 아이콘을 눌러 한글(HWP)에 붙여넣으세요.")
-        target_prob = st.session_state.problems_list[st.session_state.curr_idx]
-        st.code(target_prob, language="text")
+        # 2) 변환 로직 (캐싱 적용)
+        if convert_btn:
+            if st.session_state.last_page_key != page_key:
+                st.session_state.curr_idx = 0
+                st.session_state.last_page_key = page_key
+
+            if page_key in st.session_state.converted_cache:
+                st.success("⚡ 저장된 결과를 불러왔습니다! (API 미사용)")
+                result_text = st.session_state.converted_cache[page_key]
+                st.session_state.problems_list = parse_problems(result_text)
+                
+            else:
+                with st.spinner(f"🤖 AI가 페이지 내 모든 {doc_type}을(를) 분석 중입니다..."):
+                    result_text = get_hwp_conversion(image_to_process, doc_type, user_api_key)
+                    
+                    if "API 오류" not in result_text and "키가 없습니다" not in result_text:
+                        st.session_state.converted_cache[page_key] = result_text
+                        st.session_state.problems_list = parse_problems(result_text)
+                        st.session_state.curr_idx = 0
+                    else:
+                        st.error(result_text)
+
+        # 3) 결과 뷰어 (하나씩 보기)
+        if st.session_state.problems_list:
+            # 네비게이션
+            c1, c2, c3 = st.columns([1, 2, 1])
+            with c1:
+                if st.button("⬅️ 이전 문제"):
+                    if st.session_state.curr_idx > 0: st.session_state.curr_idx -= 1
+            with c2:
+                cur = st.session_state.curr_idx + 1
+                tot = len(st.session_state.problems_list)
+                st.markdown(f"<div style='text-align:center; font-size:1.1em;'><b>항목 {cur} / {tot}</b></div>", unsafe_allow_html=True)
+            with c3:
+                if st.button("다음 문제 ➡️"):
+                    if st.session_state.curr_idx < tot - 1: st.session_state.curr_idx += 1
+            
+            # 코드 출력
+            st.info("우측 상단의 복사(Copy) 아이콘을 눌러 한글(HWP)에 붙여넣으세요.")
+            target_prob = st.session_state.problems_list[st.session_state.curr_idx]
+            st.code(target_prob, language="text")
+        else:
+            # 변환 전 안내 문구
+            st.info("👈 사이드바의 '보이는 문제 전체 변환 🚀' 버튼을 누르면 여기에 결과가 나타납니다.")
         
 else:
-    st.info("👈 왼쪽 사이드바에서 PDF를 업로드하고 API 키를 입력하세요.")
+    st.info("👈 왼쪽 사이드바에서 PDF를 업로드하고 문서 유형을 선택하세요.")
