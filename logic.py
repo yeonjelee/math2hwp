@@ -44,10 +44,10 @@ def apply_hwp_rm_rule(text):
         
     return re.sub(pattern, repl, text)
 
-def get_hwp_conversion(image, doc_type, user_api_key=None):
+def get_hwp_conversion(images_list, doc_type, user_api_key=None):
     """
     gemini-flash-latest 모델을 강제로 사용하여 HWP 수식 변환
-    doc_type에 따라 추출 내용 분기 처리
+    여러 장의 이미지(images_list)를 한 번에 받아서 처리함
     """
     
     final_key = user_api_key
@@ -67,8 +67,6 @@ def get_hwp_conversion(image, doc_type, user_api_key=None):
         
         model = genai.GenerativeModel('gemini-flash-latest')
         
-        optimized_img = optimize_image(image)
-        
         # 문서 유형별 추가 지시사항
         if doc_type == "문제":
             doc_instruction = "풀이나 정답은 무시하고, 각 문제의 지문과 수식만 추출하라."
@@ -77,7 +75,6 @@ def get_hwp_conversion(image, doc_type, user_api_key=None):
         else: # 빠른 정답
             doc_instruction = "각 문제 번호와 그에 해당하는 최종 정답만 추출하라. 긴 풀이 과정은 생략하라."
 
-        # 🌟 프롬프트 업데이트: 쉼표 나열 묶음 규칙 강력 추가 🌟
         system_prompt = f"""
         너는 대한민국 수학 교재 편집 전문가다. 
         주어진 이미지에서 **식별 가능한 모든 수학 내용**을 찾아 '한글(HWP) 수식 스크립트'로 변환하라.
@@ -150,12 +147,17 @@ def get_hwp_conversion(image, doc_type, user_api_key=None):
         10. **대문자 알파벳:** 수식 내에 대문자 알파벳(A, B, P 등)이 들어갈 경우, 반드시 글자 앞에 `rm `을 붙여라. (예: rm A, rm B, rm P 등)
         """
 
+        # 🌟 여러 이미지를 하나의 배열로 합쳐서 프롬프트 구성
+        prompt_parts = [system_prompt]
+        for img in images_list:
+            prompt_parts.append(optimize_image(img))
+
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                response = model.generate_content([system_prompt, optimized_img])
+                # 합쳐진 프롬프트 배열을 한 번의 API 호출로 전송!
+                response = model.generate_content(prompt_parts)
                 
-                # 🌟 AI가 뱉어낸 결과 텍스트를 받아서 파이썬 코드로 대문자 rm 강제 후처리 적용 🌟
                 result_text = response.text
                 final_processed_text = apply_hwp_rm_rule(result_text)
                 
