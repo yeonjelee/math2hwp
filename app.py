@@ -53,12 +53,32 @@ def parse_problems(text):
                 
     return cleaned_parts
 
+# 🌟 "1, 2, 4-6" -> [1, 2, 4, 5, 6] 으로 쪼개주는 스마트 파서 추가 🌟
+def parse_page_numbers(page_str, max_pages):
+    pages = set()
+    for part in page_str.split(','):
+        part = part.strip()
+        if not part: continue
+        if '-' in part:
+            try:
+                start, end = map(int, part.split('-'))
+                if 1 <= start <= end <= max_pages:
+                    pages.update(range(start, end + 1))
+            except: pass
+        else:
+            try:
+                p = int(part)
+                if 1 <= p <= max_pages:
+                    pages.add(p)
+            except: pass
+    return sorted(list(pages))
+
 # --------------------------------------------------------------------------
 # 4. 메인 화면 UI 및 설정 (사이드바 없음)
 # --------------------------------------------------------------------------
-st.title("🧮 수학 문제 HWP 변환기")
+st.title("🧮 수학 문제 HWP 변환기 (일괄 처리 지원)")
 
-# API 키 설정 (가장 위쪽, 기본적으로 접어둠)
+# API 키 설정
 with st.expander("🔑 API 키 설정", expanded=False):
     user_api_key = st.text_input(
         "Google API Key", 
@@ -71,41 +91,56 @@ with st.expander("🔑 API 키 설정", expanded=False):
 uploaded_file = st.file_uploader("교재 PDF/이미지 업로드", type=["pdf", "jpg", "png"])
 
 if uploaded_file:
-    # 🌟 메인 화면 상단: 파일 처리 및 페이지 선택 🌟
+    images_to_process = []
+    page_key_prefix = ""
+    
     if uploaded_file.type == "application/pdf":
         doc = fitz.open(stream=uploaded_file.read(), filetype="pdf")
         total_pages = len(doc)
         
-        # 페이지 선택 입력창을 작게 배치
-        col_page, _ = st.columns([1, 4])
+        # 🌟 UI 변경: 텍스트 입력창으로 여러 페이지 받기 🌟
+        col_page, _ = st.columns([1.5, 3.5])
         with col_page:
-            page_num = st.number_input(f"📄 페이지 선택 (총 {total_pages}장)", min_value=1, max_value=total_pages, value=1)
+            page_input = st.text_input(
+                f"📄 변환할 페이지 입력 (총 {total_pages}장)", 
+                value="1", 
+                help="쉼표(,)나 하이픈(-)을 사용. 예: 1, 3, 5-7"
+            )
         
-        page = doc.load_page(page_num - 1)
-        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-        origin_image = Image.open(io.BytesIO(pix.tobytes()))
-        page_key_prefix = f"{uploaded_file.name}_p{page_num}"
+        selected_pages = parse_page_numbers(page_input, total_pages)
+        if not selected_pages:
+            st.warning("유효한 페이지 번호를 입력해주세요.")
+            
+        page_key_prefix = f"{uploaded_file.name}_pages_{'_'.join(map(str, selected_pages))}"
     else:
         origin_image = Image.open(uploaded_file)
         page_key_prefix = uploaded_file.name
+        selected_pages = [1] # 이미지는 기본 1장 취급
 
     st.markdown("---")
 
-    # 🌟 헤더 영역: 설정 및 변환 버튼 (가로 3단 배치) 🌟
+    # 헤더 영역: 설정 및 변환 버튼
     set_c1, set_c2, set_c3 = st.columns([1.5, 1.5, 1])
     
     with set_c1:
-        # 라디오 버튼을 가로형(horizontal)으로 배치해서 공간 절약
         doc_type = st.radio("문서 유형", ["문제", "상세 해설", "빠른 정답"], horizontal=True)
     with set_c2:
-        crop_mode = st.selectbox("영역 선택", ["전체 페이지", "왼쪽 절반", "오른쪽 절반", "위쪽 절반", "아래쪽 절반"])
+        crop_mode = st.selectbox("영역 선택 (선택한 모든 페이지 적용)", ["전체 페이지", "왼쪽 절반", "오른쪽 절반", "위쪽 절반", "아래쪽 절반"])
     with set_c3:
-        # 드롭다운과 높이를 맞추기 위해 약간의 여백 추가
         st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-        convert_btn = st.button("보이는 문제 전체 변환 🚀", type="primary", use_container_width=True)
+        # 🌟 버튼 텍스트 변경: 호출을 강조 🌟
+        convert_btn = st.button(f"선택한 {len(selected_pages)}페이지 일괄 변환 🚀", type="primary", use_container_width=True)
 
-    # 이미지 처리 및 키 생성
-    image_to_process = crop_image(origin_image, crop_mode)
+    # 🌟 선택한 페이지들을 모두 이미지 리스트로 만들기 🌟
+    if uploaded_file.type == "application/pdf" and selected_pages:
+        for p_num in selected_pages:
+            page = doc.load_page(p_num - 1)
+            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
+            img = Image.open(io.BytesIO(pix.tobytes()))
+            images_to_process.append(crop_image(img, crop_mode))
+    elif uploaded_file.type != "application/pdf":
+        images_to_process.append(crop_image(origin_image, crop_mode))
+
     page_key = f"{page_key_prefix}_{crop_mode}_{doc_type}"
 
     st.divider()
@@ -113,10 +148,12 @@ if uploaded_file:
     # ---------------- 좌/우 분할 뷰어 (원본 이미지 & 변환 결과) ----------------
     show_image = st.toggle("📄 원본 이미지 함께 보기", value=True, help="스위치를 끄면 결과창이 전체 너비로 확장됩니다.")
     
-    if show_image:
+    if show_image and images_to_process:
         col_left, col_right = st.columns(2)
         with col_left:
-            st.image(image_to_process, caption="변환 대상 영역", use_container_width=True)
+            # 🌟 여러 장을 스크롤 내리며 볼 수 있게 렌더링 🌟
+            for idx, img in enumerate(images_to_process):
+                st.image(img, caption=f"변환 대상: 페이지 {selected_pages[idx] if uploaded_file.type == 'application/pdf' else '이미지'}", use_container_width=True)
         result_container = col_right
     else:
         result_container = st.container()
@@ -125,7 +162,7 @@ if uploaded_file:
     with result_container:
         st.subheader("📝 변환 결과")
         
-        if convert_btn:
+        if convert_btn and images_to_process:
             if st.session_state.last_page_key != page_key:
                 st.session_state.curr_idx = 0
                 st.session_state.last_page_key = page_key
@@ -136,10 +173,11 @@ if uploaded_file:
                 st.session_state.problems_list = parse_problems(result_text)
                 
             else:
-                with st.spinner(f"🤖 AI가 페이지 내 모든 {doc_type}을(를) 분석 중입니다..."):
-                    result_text = get_hwp_conversion(image_to_process, doc_type, user_api_key)
+                # API 호출! 리스트가 통째로 넘어감
+                with st.spinner(f"🤖 AI가 {len(images_to_process)}장의 페이지에서 모든 {doc_type}을(를) 분석 중입니다..."):
+                    result_text = get_hwp_conversion(images_to_process, doc_type, user_api_key)
                     
-                    if "API 오류" not in result_text and "키가 없습니다" not in result_text:
+                    if "API 오류" not in result_text and "키가 없습니다" not in result_text and "🚨" not in result_text:
                         st.session_state.converted_cache[page_key] = result_text
                         st.session_state.problems_list = parse_problems(result_text)
                         st.session_state.curr_idx = 0
@@ -149,21 +187,21 @@ if uploaded_file:
         if st.session_state.problems_list:
             c1, c2, c3 = st.columns([1, 2, 1])
             with c1:
-                if st.button("⬅️ 이전 문제"):
+                if st.button("⬅️ 이전 항목"):
                     if st.session_state.curr_idx > 0: st.session_state.curr_idx -= 1
             with c2:
                 cur = st.session_state.curr_idx + 1
                 tot = len(st.session_state.problems_list)
                 st.markdown(f"<div style='text-align:center; font-size:1.1em;'><b>항목 {cur} / {tot}</b></div>", unsafe_allow_html=True)
             with c3:
-                if st.button("다음 문제 ➡️"):
+                if st.button("다음 항목 ➡️"):
                     if st.session_state.curr_idx < tot - 1: st.session_state.curr_idx += 1
             
             st.info("우측 상단의 복사(Copy) 아이콘을 눌러 한글(HWP)에 붙여넣으세요.")
             target_prob = st.session_state.problems_list[st.session_state.curr_idx]
             st.code(target_prob, language="text")
         else:
-            st.info("👆 위에 있는 '보이는 문제 전체 변환 🚀' 버튼을 누르면 여기에 결과가 나타납니다.")
+            st.info("👆 위에 있는 버튼을 누르면 여기에 결과가 나타납니다.")
         
 else:
     st.info("👆 위에 파일을 먼저 업로드해 주세요.")
